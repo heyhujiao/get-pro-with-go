@@ -2,108 +2,109 @@ package main
 
 import (
 	"fmt"
+	"sync"
 )
 
-func pad(l int, c string) string {
-	l = 4 - l
-	s := ""
-	for i := 0; i < l; i++ {
-		s += c
-	}
-	return s
+type Fetcher interface {
+	// Fetch returns the body of URL and
+	// a slice of URLs found on that page.
+	Fetch(url string) (body string, urls []string, err error)
 }
 
-func Crawl(url string, depth int, fetcher Fetcher, ch chan string, history map[string]bool) {
-	var c func(url string, depth int, fetcher Fetcher, ch chan string, history map[string]bool)
-	c = func(url string, depth int, fetcher Fetcher, ch chan string, history map[string]bool) {
-		if depth <= 0 {
-			return
-		}
-		body, urls, err := fetcher.Fetch(url)
+// Crawl uses fetcher to recursively crawl
+// pages starting with url, to a maximum of depth.
 
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
+type fetchedUrls struct {
+	urls map[string]bool
+	mux  sync.Mutex
+}
 
-		history[url] = true
+func Crawl(url string, depth int, fetcher Fetcher, used fetchedUrls, wg *sync.WaitGroup) {
+	// TODO: Fetch URLs in parallel.
+	// TODO: Don't fetch the same URL twice.
+	// This implementation doesn't do either:
 
-		ch <- fmt.Sprintf("%sfound %s %q\n **** %v\n", pad(depth, "-"), url, body, urls)
-		for _, u := range urls {
-			if !history[u] {
-				history[u] = true
-				c(u, depth-1, fetcher, ch, history)
-			} else {
-				fmt.Printf(">>>%s is repetitive\n", u)
-			}
-		}
+	if depth <= 0 {
 		return
 	}
 
-	c(url, depth, fetcher, ch, history)
+	used.mux.Lock()
 
-	close(ch)
+	if used.urls[url] == false {
+		used.urls[url] = true
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			body, urls, err := fetcher.Fetch(url)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			fmt.Printf("found: %s %q\n", url, body)
+			for _, u := range urls {
+				Crawl(u, depth-1, fetcher, used, wg)
+			}
+			return
+		}()
+	}
+
+	used.mux.Unlock()
+	return
 }
 
 func main() {
-	ch := make(chan string)
-	history := make(map[string]bool)
-	go Crawl("http://golang.org/", 4, fetcher, ch, history)
-	for s := range ch {
-		fmt.Println(s)
-	}
+	wg := &sync.WaitGroup{}
+	used := fetchedUrls{urls: make(map[string]bool)}
+	Crawl("https://golang.org/", 4, fetcher, used, wg)
 
-	fmt.Println("============= history ================")
-	fmt.Println(history)
+	wg.Wait()
 }
 
-type Fetcher interface {
-	Fetch(url string) (body string, urls []string, err error)
-}
+// fakeFetcher is Fetcher that returns canned results.
+type fakeFetcher map[string]*fakeResult
 
 type fakeResult struct {
 	body string
 	urls []string
 }
 
-type fakeFetcher map[string]*fakeResult
-
-func (f fakeFetcher) Fetch(url string) (body string, urls []string, err error) {
+func (f fakeFetcher) Fetch(url string) (string, []string, error) {
 	if res, ok := f[url]; ok {
 		return res.body, res.urls, nil
 	}
-	return "", nil, fmt.Errorf("not found %s", url)
+	return "", nil, fmt.Errorf("not found: %s", url)
 }
 
+// fetcher is a populated fakeFetcher.
 var fetcher = fakeFetcher{
-	"http://golang.org/": &fakeResult{
+	"https://golang.org/": &fakeResult{
 		"The Go Programming Language",
 		[]string{
-			"http://golang.org/pkg/",
-			"http://golang.org/cmd/",
+			"https://golang.org/pkg/",
+			"https://golang.org/cmd/",
 		},
 	},
-	"http://golang.org/pkg/": &fakeResult{
+	"https://golang.org/pkg/": &fakeResult{
 		"Packages",
 		[]string{
-			"http://golang.org/",
-			"http://golang.org/cmd/",
-			"http://golang.org/pkg/fmt/",
-			"http://golang.org/pkg/os/",
+			"https://golang.org/",
+			"https://golang.org/cmd/",
+			"https://golang.org/pkg/fmt/",
+			"https://golang.org/pkg/os/",
 		},
 	},
-	"http://golang.org/pkg/fmt/": &fakeResult{
+	"https://golang.org/pkg/fmt/": &fakeResult{
 		"Package fmt",
 		[]string{
-			"http://golang.org/",
-			"http://golang.org/pkg/",
+			"https://golang.org/",
+			"https://golang.org/pkg/",
 		},
 	},
-	"http://golang.org/pkg/os/": &fakeResult{
+	"https://golang.org/pkg/os/": &fakeResult{
 		"Package os",
 		[]string{
-			"http://golang.org/",
-			"http://golang.org/pkg/",
+			"https://golang.org/",
+			"https://golang.org/pkg/",
 		},
 	},
 }

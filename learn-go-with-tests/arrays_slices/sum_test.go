@@ -1,17 +1,9 @@
-package main
+package arrays_slices
 
 import (
 	"reflect"
 	"testing"
 )
-
-func Sum(numbers []int) int {
-	sum := 0
-	for _, number := range numbers {
-		sum += number
-	}
-	return sum
-}
 
 func TestSum(t *testing.T) {
 
@@ -34,32 +26,6 @@ func TestSum(t *testing.T) {
 			t.Errorf("got %d want %d given, %v", got, want, numbers)
 		}
 	})
-}
-
-// using variadic functions
-// https://gobyexample.com/variadic-functions
-func SumAll(numbersToSum ...[]int) []int {
-	lengthOfNumbers := len(numbersToSum)
-	sums := make([]int, lengthOfNumbers)
-
-	for i, numbers := range numbersToSum {
-		sums[i] = Sum(numbers)
-	}
-
-	return sums
-}
-
-func SumAllTails(numbersToSum ...[]int) []int {
-	var sums []int
-	for _, numbers := range numbersToSum {
-		if len(numbers) == 0 {
-			sums = append(sums, 0)
-		} else {
-			tail := numbers[1:]
-			sums = append(sums, Sum(tail))
-		}
-	}
-	return sums
 }
 
 func TestSumAllTails(t *testing.T) {

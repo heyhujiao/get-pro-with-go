@@ -33,7 +33,6 @@ func TestArea(t *testing.T) {
 				t.Errorf("got %g want %g", got, tt.hasArea)
 			}
 		})
-
 	}
 
 	// checkArea := func(t testing.TB, shape Shape, want float64) {
